@@ -5,11 +5,10 @@
 <html lang="en">
 @endif
 <head>
-
 @php
     $seosetting = \App\SeoSetting::first();
 @endphp
-
+@stack('styles')
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="index, follow">
@@ -48,6 +47,10 @@
 
 <title>@yield('meta_title', config('app.name', 'Laravel'))</title>
 
+<link href='https://fonts.googleapis.com/css?family=Fjalla+One' rel='stylesheet' type='text/css'>
+<link rel="stylesheet" href="{{asset('frontend/spinner/css/style.css')}}">
+<link rel="stylesheet" href="{{asset('frontend/spinner/css/spinner.css')}}">
+
 <!-- Fonts -->
 <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i,800,800i" rel="stylesheet" media="none" onload="if(media!='all')media='all'">
 
@@ -66,9 +69,10 @@
 <link type="text/css" href="{{ asset('frontend/css/jquery.share.css') }}" rel="stylesheet" media="none" onload="if(media!='all')media='all'">
 <link type="text/css" href="{{ asset('frontend/css/intlTelInput.min.css') }}" rel="stylesheet" media="none" onload="if(media!='all')media='all'">
 <link type="text/css" href="{{ asset('css/spectrum.css')}}" rel="stylesheet" media="none" onload="if(media!='all')media='all'">
+<link rel="stylesheet" href="{{asset('frontend/css/hide_under_plus.css')}}">
 
 <!-- Global style (main) -->
-<link type="text/css" href="{{ asset('frontend/css/active-shop.css') }}" rel="stylesheet" media="all">
+<link type="text/css" href="{{ asset('frontend/css/shop.css') }}" rel="stylesheet" media="all">
 
 
 <link type="text/css" href="{{ asset('frontend/css/main.css') }}" rel="stylesheet" media="all">
@@ -81,12 +85,19 @@
 <!-- Facebook Chat style -->
 <link href="{{ asset('frontend/css/fb-style.css')}}" rel="stylesheet" media="none" onload="if(media!='all')media='all'">
 
+@if(\App\GeneralSetting::first()->color=='default')
 <!-- color theme -->
 <link href="{{ asset('frontend/css/colors/'.\App\GeneralSetting::first()->frontend_color.'.css')}}" rel="stylesheet" media="all">
+@else
+<!-- color theme -->
+<link href="{{url('public/frontend/css/colors/admin_set_color.php')}}" rel='stylesheet' type="text/css" media="all">
 
+@endif
 <!-- Custom style -->
 <link type="text/css" href="{{ asset('frontend/css/custom-style.css') }}" rel="stylesheet" media="all">
 
+<link rel="stylesheet" href="{{asset('frontend/css/sidenav.css')}}">
+<!-- sidenav -->
 <!-- jQuery -->
 <script src="{{ asset('frontend/js/vendor/jquery.min.js') }}"></script>
 
@@ -102,6 +113,9 @@
       gtag('config', '{{ env('TRACKING_ID') }}');
     </script>
 @endif
+
+<script src="{{asset('frontend/js/d3.v3.min.js')}}" charset="utf-8"></script>
+
 
 @if (\App\BusinessSetting::where('type', 'facebook_pixel')->first()->value == 1)
 <!-- Facebook Pixel Code -->
@@ -124,17 +138,37 @@
 <!-- End Facebook Pixel Code -->
 @endif
 
+
+{{-- //pricing table   --}}
+<link type="text/css" href="{{ asset('frontend/css/subscription_tables.css') }}" rel="stylesheet" media="all">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
+@stack('scripts')
+
+@php
+    echo get_setting('header_script');
+@endphp
 </head>
 <body>
 
 
 <!-- MAIN WRAPPER -->
 <div class="body-wrap shop-default shop-cards shop-tech gry-bg">
+    @php
+        if(Cookie::has('cart') && Cookie::has('laravel_cookie_consent')){
+            $cart_saved =  json_decode(Cookie::get('cart'),true);
+            $cart_data = collect($cart_saved)->map(function ($cart) {
+                return (object) $cart;
+            });
 
+            }
+
+    @endphp
     <!-- Header -->
+    @if(App\TopBanner::where('status',1)->first())@include('frontend.inc.top')@endif
     @include('frontend.inc.nav')
 
     @yield('content')
+    
 
     @include('frontend.inc.footer')
 
@@ -167,6 +201,18 @@
 
 </div><!-- END: body-wrap -->
 
+    @if (\App\BusinessSetting::where('type', 'show_cookies_agreement')->first()->value == 1 && (!Cookie::has('user_viwed_products') && !Cookie::has('laravel_cookie_consent')) )
+        <div class="aiz-cookie-alert shadow-xl">
+            <div class="p-3 bg-dark rounded">
+                <div class="text-white mb-3">
+                  {!! \App\BusinessSetting::where('type', 'cookies_agreement_text')->first()->value !!}
+                </div>
+                <button type="button" class="btn btn-primary aiz-cookie-accepet"  id="make-cookies">
+                    {{ __('Ok. I Understood') }}
+                </button>
+            </div>
+        </div>
+    @endif
 <!-- SCRIPTS -->
 <a href="#" class="back-to-top btn-back-to-top"></a>
 
@@ -214,7 +260,7 @@
 <script src="{{ asset('frontend/js/intlTelInput.min.js') }}"></script>
 
 <!-- App JS -->
-<script src="{{ asset('frontend/js/active-shop.js') }}"></script>
+<script src="{{ asset('frontend/js/shop.js') }}"></script>
 <script src="{{ asset('frontend/js/main.js') }}"></script>
 
 <script>
@@ -242,6 +288,13 @@
                 });
             });
         }
+        
+        $("#make-cookies").click(function(){
+	 $.get('{{ route('make_cookies') }}', function(data){
+	 	location.reload();
+           });
+	});
+        
 
         if ($('#currency-change').length > 0) {
             $('#currency-change .dropdown-item a').each(function() {
@@ -273,7 +326,7 @@
 
             $('.typed-search-box').removeClass('d-none');
             $('.search-preloader').removeClass('d-none');
-            $.post('{{ route('search.ajax') }}', { _token: '{{ @csrf_token() }}', search:search}, function(data){
+            $.get('{{ route('search.ajax') }}', { _token: '{{ @csrf_token() }}', search:search}, function(data){
                 if(data == '0'){
                     // $('.typed-search-box').addClass('d-none');
                     $('#search-content').html(null);
@@ -316,6 +369,25 @@
             $('#compare_items_sidenav').html(parseInt($('#compare_items_sidenav').html())+1);
         });
     }
+    
+        function addToBestSeller(id){
+           @if (Auth::check() && (Auth::user()->user_type == 'customer' || Auth::user()->user_type == 'seller'))
+             
+           $.post('{{ route('best_seller.store') }}', {_token:'{{ csrf_token() }}', seller_id:id}, function(data){
+           if(data==1){
+            showFrontendAlert('success', 'Item has been added to best seller list');
+            }
+            else if(data==2){
+               showFrontendAlert('warning', 'Seller allready added');
+            }
+            else{
+             showFrontendAlert('error', 'Try again later...');
+            }
+        });
+          @else
+            showFrontendAlert('warning', 'Please login first');
+        @endif
+    }
 
     function addToWishList(id){
         @if (Auth::check() && (Auth::user()->user_type == 'customer' || Auth::user()->user_type == 'seller'))
@@ -350,8 +422,13 @@
                 defaultScale: -1
             });
             getVariantPrice();
+            getVariantPriceWholesale();
         });
     }
+    
+    $('#option-choice-form-wholesale input').on('change', function(){
+        getVariantPriceWholesale();
+    });
 
     $('#option-choice-form input').on('change', function(){
         getVariantPrice();
@@ -369,6 +446,31 @@
                    $('#available-quantity').html(data.quantity);
                    $('.input-number').prop('max', data.quantity);
                    //console.log(data.quantity);
+                   if(parseInt(data.quantity) < 1){
+                       $('.buy-now').hide();
+                       $('.add-to-cart').hide();
+                   }
+                   else{
+                       $('.buy-now').show();
+                       $('.add-to-cart').show();
+                   }
+               }
+           });
+        }
+    }
+    
+      function getVariantPriceWholesale(){
+        if($('#option-choice-form input[name=quantity]').val() > 0 && checkAddToCartValidity()){
+            $.ajax({
+               type:"POST",
+               url: '{{ route('products.variant_price_wholesale') }}',
+               data: $('#option-choice-form').serializeArray(),
+               success: function(data){
+                   $('#option-choice-form #chosen_price_div').removeClass('d-none');
+                   $('#option-choice-form #chosen_price_div #chosen_price').html(data.price);
+                   $('#available-quantity').html(data.quantity);
+                   $('.input-number').prop('max', data.max_stock);
+                   $('#min_stock_wholesale').val(data.min_stock);
                    if(parseInt(data.quantity) < 1){
                        $('.buy-now').hide();
                        $('.add-to-cart').hide();
@@ -403,10 +505,13 @@
         if(checkAddToCartValidity()) {
             $('#addToCart').modal();
             $('.c-preloader').show();
+            data = $('#option-choice-form').serializeArray();
+            if(data.length==0){data = $('#option-choice-form-wholesale').serializeArray();}
             $.ajax({
                type:"POST",
                url: '{{ route('cart.addToCart') }}',
-               data: $('#option-choice-form').serializeArray(),
+               data: data,
+               
                success: function(data){
                    $('#addToCart-modal-body').html(null);
                    $('.c-preloader').hide();
@@ -426,10 +531,12 @@
         if(checkAddToCartValidity()) {
             $('#addToCart').modal();
             $('.c-preloader').show();
+            data = $('#option-choice-form').serializeArray();
+            if(data.length==0){data = $('#option-choice-form-wholesale').serializeArray();}
             $.ajax({
                type:"POST",
                url: '{{ route('cart.addToCart') }}',
-               data: $('#option-choice-form').serializeArray(),
+               data: data,
                success: function(data){
                    //$('#addToCart-modal-body').html(null);
                    //$('.c-preloader').hide();
@@ -475,6 +582,24 @@
             $('.c-preloader').hide();
         });
     }
+    
+    
+    function show_order_detail_product(order_id,order_detail_id)
+    {
+        $('#order-details-modal-body').html(null);
+
+        if(!$('#modal-size').hasClass('modal-lg')){
+            $('#modal-size').addClass('modal-lg');
+        }
+
+        $.post('{{ route('orders.details.product') }}', { _token : '{{ @csrf_token() }}', order_detail_id: order_detail_id,order_id : order_id}, function(data){
+            $('#order-details-modal-body').html(data);
+            $('#order_details').modal();
+            $('.c-preloader').hide();
+        });
+    }
+    
+    
 
     function cartQuantityInitialize(){
         $('.btn-number').click(function(e) {
@@ -584,9 +709,42 @@
          });
      }
 
+     $('#uploadProducts').modal('show');
+     $('#uploadProducts').modal({
+    backdrop: 'static',
+    keyboard: false
+});
+
+function showApiNotification(){
+    showFrontendAlert('warning','Please login as a user.')
+}
+
+ function open_side_nav(){
+     	    $('.wrapper').toggleClass('wrapper-width');
+            $('.sidebar-left').toggleClass('side-left-width');
+            $('.category-name , .name , .widget-seller-btn,.sidebar-widget-title,.widget-balance , .star-rating').toggleClass('d-block');
+            $('ul.categories--style-3 > li i:not(.fa)').toggleClass('font-size-1rem');
+            $('ul.categories--style-3 > li .fa').toggleClass('font-size-13px');
+            $('ul.categories > li').toggleClass('ml-0')
+            $('ul.categories > li').toggleClass('pt-0')
+            $('ul.categories > li').toggleClass('border-bottom-none');
+            $('#hamburger-side-nav span').toggleClass('font-size-1rem');
+            $('ul.categories--style-3 > li.border-bottom-custom>ul').toggleClass('inner-nav');
+ }
+
+ open_side_nav();
 </script>
 
 @yield('script')
+<script src="{{asset('frontend/js/sidenav.js')}}"></script>
 
+@include('frontend.inc.footer_nav')
+<script src="{{ asset('frontend/js/hide_under_plus.js')}}"></script>
+
+@php
+    echo get_setting('footer_script');
+@endphp
+
+<!--End of Tawk.to Script-->
 </body>
 </html>
